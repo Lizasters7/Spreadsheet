@@ -67,11 +67,18 @@
 
 	<ItemGroup>
 		<PackageReference Include="Antlr4" Version="4.6.6">
-		  <PrivateAssets>all</PrivateAssets>
-		  <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+			<PrivateAssets>all</PrivateAssets>
+			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 		</PackageReference>
+		<PackageReference Include="Antlr4.Runtime" Version="4.6.6" />
 		<PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
 		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.0" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Antlr4 Update="LabCalculator.g4">
+	    <CustomToolNamespace>LabCalculator</CustomToolNamespace>
+	  </Antlr4>
 	</ItemGroup>
 
 </Project>

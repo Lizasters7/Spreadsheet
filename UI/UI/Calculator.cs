@@ -23,7 +23,7 @@ namespace LabCalculator
             parser.RemoveErrorListeners();
             parser.AddErrorListener(new ThrowExceptionErrorListener());
             var tree = parser.compileUnit();
-            var visitor = new LabCalculatorVisitor();
+            var visitor = new LabCalculatorVisitor(resolveCell);
             return visitor.Visit(tree);
         }
     }

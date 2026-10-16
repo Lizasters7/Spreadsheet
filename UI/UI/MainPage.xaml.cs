@@ -3,18 +3,90 @@ using Microsoft.Maui.Controls.Compatibility;
 using System;
 using System.Collections.Generic;
 using Grid = Microsoft.Maui.Controls.Grid;
+using LabCalculator;
 
 namespace UI
 {
     public partial class MainPage : ContentPage
     {
-        const int CountColumn = 20; // кількість стовпчиків (A to Z)
-        const int CountRow = 50;    // кількість рядків
+        const int CountColumn = 26; 
+        const int CountRow = 50;
+
+        private readonly Dictionary<string, string> cellExpressions = new Dictionary<string, string>();
 
         public MainPage()
         {
             InitializeComponent();
             CreateGrid();
+        }
+
+        private string GetCellName(int row, int col)
+        {
+            return GetColumnName(col + 1) + (row + 1);
+        }
+
+        private object EvaluateCell(string cellName, HashSet<string> visiting)
+        {
+            if (!cellExpressions.TryGetValue(cellName, out var expr) || string.IsNullOrWhiteSpace(expr))
+            {
+                return 0.0; 
+            }
+            if (!visiting.Add(cellName))
+            {
+                throw new ArgumentException($"Circular reference in {cellName}");
+            }
+            try
+            {
+                return Calculator.Evaluate(expr, name => EvaluateCell(name, visiting));
+            }
+            finally
+            {
+                visiting.Remove(cellName);
+            }
+        }
+
+        private void RecalculateAll()
+        {
+            foreach (var child in grid.Children)
+            {
+                if (child is Entry entry && !entry.IsFocused)
+                {
+                    var name = GetCellName(Grid.GetRow(entry) - 1, Grid.GetColumn(entry) - 1);
+                    if (cellExpressions.TryGetValue(name, out var expr) && !string.IsNullOrWhiteSpace(expr))
+                    {
+                        try
+                        {
+                            var result = EvaluateCell(name, new HashSet<string>());
+                            entry.Text = result is bool b ? (b ? "True" : "False") : result.ToString();
+                        }
+                        catch (Exception)
+                        {
+                            entry.Text = "Error";
+                        }
+                    }
+                    else
+                    {
+                        entry.Text = "";
+                    }
+                }
+            }
+        }
+
+        private void Entry_Focused(object sender, FocusEventArgs e)
+        {
+            var entry = (Entry)sender;
+            var name = GetCellName(Grid.GetRow(entry) - 1, Grid.GetColumn(entry) - 1);
+            string expr;
+            if (cellExpressions.TryGetValue(name, out expr))
+            {
+                entry.Text = expr;
+                textInput.Text = expr;
+            }
+            else
+            {
+                entry.Text = "";
+                textInput.Text = "";
+            }
         }
 
         //створення таблиці
@@ -74,6 +146,7 @@ namespace UI
                         HorizontalOptions = LayoutOptions.Center
                     };
                     entry.Unfocused += Entry_Unfocused;
+                    entry.Focused += Entry_Focused;
                     Grid.SetRow(entry, row + 1);
                     Grid.SetColumn(entry, col + 1);
                     grid.Children.Add(entry);
@@ -96,20 +169,17 @@ namespace UI
             return columnName;
         }
 
-        // викликається, коли користувач вийде зі зміненої клітинки (втратить фокус)
         private void Entry_Unfocused(object sender, FocusEventArgs e)
         {
             var entry = (Entry)sender;
-            var row = Grid.GetRow(entry) - 1;
-            var col = Grid.GetColumn(entry) - 1;
-            var content = entry.Text;
-
-            // Додайте додаткову логіку, яка виконується при виході зі зміненої клітинки
+            var name = GetCellName(Grid.GetRow(entry) - 1, Grid.GetColumn(entry) - 1);
+            cellExpressions[name] = entry.Text ?? "";
+            RecalculateAll();
         }
 
         private void CalculateButton_Clicked(object sender, EventArgs e)
         {
-            // Обробка кнопки "Порахувати"
+            RecalculateAll();
         }
 
         private void SaveButton_Clicked(object sender, EventArgs e)
@@ -175,6 +245,7 @@ namespace UI
                     HorizontalOptions = LayoutOptions.Center
                 };
                 entry.Unfocused += Entry_Unfocused;
+                entry.Focused += Entry_Focused;
                 Grid.SetRow(entry, newRow);
                 Grid.SetColumn(entry, col + 1);
                 grid.Children.Add(entry);

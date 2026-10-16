@@ -11,6 +11,13 @@ namespace LabCalculator
     {
        Dictionary<string, double> tableIdentifier = new Dictionary<string, double>();
 
+        private readonly Func<string, object> resolveCell;
+
+        public LabCalculatorVisitor(Func<string, object> resolveCell = null)
+        {
+            this.resolveCell = resolveCell;
+        }
+
         public override object VisitCompileUnit(LabCalculatorParser.CompileUnitContext context)
         {
             return Visit(context.expression());
@@ -25,16 +32,17 @@ namespace LabCalculator
 
         public override object VisitIdentifierExpr(LabCalculatorParser.IdentifierExprContext context)
         {
-            var result = context.GetText();
+            var name = context.GetText().ToUpper();
+            if (resolveCell != null)
+            {
+                return resolveCell(name);
+            }
             double value;
-            if (tableIdentifier.TryGetValue(result.ToString(), out value))
+            if (tableIdentifier.TryGetValue(name, out value))
             {
                 return value;
             }
-            else
-            {
-                return 0.0;
-            }
+            return 0.0;
         }
 
         public override object VisitParenthesizedExpr(LabCalculatorParser.ParenthesizedExprContext context)
