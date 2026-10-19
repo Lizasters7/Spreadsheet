@@ -7,6 +7,7 @@ using LabCalculator;
 using CommunityToolkit.Maui.Storage;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace UI
 {
@@ -14,6 +15,9 @@ namespace UI
     {
         const int CountColumn = 26;
         const int CountRow = 50;
+
+        private int selectedRow = -1;      
+        private int selectedColumn = -1;
 
         private readonly Dictionary<string, string> cellExpressions = new Dictionary<string, string>();
 
@@ -63,7 +67,21 @@ namespace UI
                         try
                         {
                             var result = EvaluateCell(name, new HashSet<string>());
-                            entry.Text = result is bool b ? (b ? "True" : "False") : result.ToString();
+                            if (result is bool b)
+                            {
+                                if (b)
+                                {
+                                    entry.Text = "True";
+                                }
+                                else
+                                {
+                                    entry.Text = "False";
+                                }
+                            }
+                            else
+                            {
+                                entry.Text = result.ToString();
+                            }
                         }
                         catch (Exception ex)
                         {
@@ -83,6 +101,9 @@ namespace UI
         {
             if (sender is Entry entry)
             {
+                selectedRow = Grid.GetRow(entry);
+                selectedColumn = Grid.GetColumn(entry);
+
                 var name = GetCellName(Grid.GetRow(entry) - 1, Grid.GetColumn(entry) - 1);
                 string? expr;
                 if (cellExpressions.TryGetValue(name, out expr))
@@ -115,10 +136,9 @@ namespace UI
 
         private void AddColumnsAndColumnLabels()
         {
+            grid.ColumnDefinitions.Add(new ColumnDefinition());
             for (int col = 0; col < CountColumn + 1; col++)
             {
-                grid.ColumnDefinitions.Add(new ColumnDefinition());
-
                 if (col > 0)
                 {
                     var label = new Label
@@ -181,6 +201,80 @@ namespace UI
             return columnName;
         }
 
+        private int GetColumnIndex(string letters)
+        {
+            int result = 0;
+            foreach (char c in letters.ToUpper())
+            {
+                result = result * 26 + (c - 'A' + 1);
+            }
+            return result;
+        }
+
+        private string? ShiftCellName(string name, int deletedRow, int deletedColumn)
+        {
+            string letters = new string(name.TakeWhile(char.IsLetter).ToArray());
+            int column = GetColumnIndex(letters);
+            int row = int.Parse(name.Substring(letters.Length));
+
+            if (row == deletedRow || column == deletedColumn)
+            {
+                return null;
+            }
+            if (deletedRow != -1 && row > deletedRow)
+            {
+                row--;
+            }
+            if (deletedColumn != -1 && column > deletedColumn)
+            {
+                column--;
+            }
+            return GetColumnName(column) + row;
+        }
+
+        private string UpdateReferences(string expression, int deletedRow, int deletedColumn)
+        {
+            string result = "";
+            int lastIndex = 0;  
+
+            foreach (Match match in Regex.Matches(expression, "[A-Za-z]+[1-9][0-9]*"))
+            {
+                result += expression.Substring(lastIndex, match.Index - lastIndex);
+                string? newName = ShiftCellName(match.Value, deletedRow, deletedColumn);
+                if (newName == null)
+                {
+                    result += "#REF";
+                }
+                else
+                {
+                    result += newName;
+                }
+
+                lastIndex = match.Index + match.Length;
+            }
+
+            result += expression.Substring(lastIndex);
+            return result;
+        }
+
+        private void ShiftExpressions(int deletedRow, int deletedColumn)
+        {
+            var updated = new Dictionary<string, string>();
+            foreach (var pair in cellExpressions)
+            {
+                string? newName = ShiftCellName(pair.Key, deletedRow, deletedColumn);
+                if (newName != null)
+                {
+                    updated[newName] = UpdateReferences(pair.Value, deletedRow, deletedColumn);
+                }
+            }
+            cellExpressions.Clear();
+            foreach (var pair in updated)
+            {
+                cellExpressions[pair.Key] = pair.Value;
+            }
+        }
+
         private void Entry_Unfocused(object? sender, FocusEventArgs e)
         {
             if (sender is Entry entry)
@@ -196,6 +290,74 @@ namespace UI
                 }
                 RecalculateAll();
             }
+        }
+
+        private void DeleteRow(int rowIndex)
+        {
+            var viewsToRemove = new List<View>();
+            foreach (var child in grid.Children)
+            {
+                if (child is View view)
+                {
+                    int row = Grid.GetRow(view);
+                    if (row == rowIndex)
+                    {
+                        viewsToRemove.Add(view);
+                    }
+                    else if (row > rowIndex)
+                    {
+                        Grid.SetRow(view, row - 1);  
+                        if (view is Label label && Grid.GetColumn(view) == 0)
+                        {
+                            label.Text = (row - 1).ToString();   
+                        }
+                    }
+                }
+            }
+            foreach (var view in viewsToRemove)
+            {
+                grid.Children.Remove(view);
+            }
+            grid.RowDefinitions.RemoveAt(grid.RowDefinitions.Count - 1);
+
+            ShiftExpressions(rowIndex, -1);
+            selectedRow = -1;
+            selectedColumn = -1;
+            RecalculateAll();
+        }
+
+        private void DeleteColumn(int columnIndex)
+        {
+            var viewsToRemove = new List<View>();
+            foreach (var child in grid.Children)
+            {
+                if (child is View view)
+                {
+                    int column = Grid.GetColumn(view);
+                    if (column == columnIndex)
+                    {
+                        viewsToRemove.Add(view);
+                    }
+                    else if (column > columnIndex)
+                    {
+                        Grid.SetColumn(view, column - 1);   
+                        if (view is Label label && Grid.GetRow(view) == 0)
+                        {
+                            label.Text = GetColumnName(column - 1);   
+                        }
+                    }
+                }
+            }
+            foreach (var view in viewsToRemove)
+            {
+                grid.Children.Remove(view);
+            }
+            grid.ColumnDefinitions.RemoveAt(grid.ColumnDefinitions.Count - 1);
+
+            ShiftExpressions(-1, columnIndex);
+            selectedRow = -1;
+            selectedColumn = -1;
+            RecalculateAll();
         }
 
         private void CalculateButton_Clicked(object sender, EventArgs e)
@@ -276,16 +438,42 @@ namespace UI
             await DisplayAlertAsync("Довідка", "Лабораторна робота 1. Варіант 34", "OK");
         }
 
-        private void DeleteRowButton_Clicked(object sender, EventArgs e)
+        private async void DeleteRowButton_Clicked(object sender, EventArgs e)
         {
-            if (grid.RowDefinitions.Count > 1)
+            if (selectedRow < 1)
             {
-                int lastRowIndex = grid.RowDefinitions.Count - 1;
-                grid.RowDefinitions.RemoveAt(lastRowIndex);
-                grid.Children.RemoveAt(lastRowIndex * (CountColumn + 1));
-                for (int col = 0; col < CountColumn; col++)
+                await DisplayAlertAsync("Видалення рядка", "Спочатку клацніть на будь-яку комірку рядка, який треба видалити.", "OK");
+            }
+            else if (grid.RowDefinitions.Count <= 2)
+            {
+                await DisplayAlertAsync("Видалення рядка", "У таблиці має лишитися хоча б один рядок.", "OK");
+            }
+            else
+            {
+                bool answer = await DisplayAlertAsync("Видалення рядка", $"Видалити рядок {selectedRow}?", "Так", "Ні");
+                if (answer)
                 {
-                    grid.Children.RemoveAt((lastRowIndex * CountColumn) + col + 1);
+                    DeleteRow(selectedRow);
+                }
+            }
+        }
+
+        private async void DeleteColumnButton_Clicked(object sender, EventArgs e)
+        {
+            if (selectedColumn < 1)
+            {
+                await DisplayAlertAsync("Видалення стовпчика", "Спочатку клацніть на будь-яку комірку стовпчика, який треба видалити.", "OK");
+            }
+            else if (grid.ColumnDefinitions.Count <= 2)
+            {
+                await DisplayAlertAsync("Видалення стовпчика", "У таблиці має лишитися хоча б один стовпчик.", "OK");
+            }
+            else
+            {
+                bool answer = await DisplayAlertAsync("Видалення стовпчика", $"Видалити стовпчик {GetColumnName(selectedColumn)}?", "Так", "Ні");
+                if (answer)
+                {
+                    DeleteColumn(selectedColumn);
                 }
             }
         }
@@ -320,6 +508,42 @@ namespace UI
                 Grid.SetColumn(entry, col + 1);
                 grid.Children.Add(entry);
             }
+
+            RecalculateAll();
+        }
+
+        private void AddColumnButton_Clicked(object sender, EventArgs e)
+        {
+            int newColumn = grid.ColumnDefinitions.Count;
+
+            grid.ColumnDefinitions.Add(new ColumnDefinition());
+
+            var label = new Label
+            {
+                Text = GetColumnName(newColumn),
+                VerticalOptions = LayoutOptions.Center,
+                HorizontalOptions = LayoutOptions.Center
+            };
+            Grid.SetRow(label, 0);
+            Grid.SetColumn(label, newColumn);
+            grid.Children.Add(label);
+
+            for (int row = 1; row < grid.RowDefinitions.Count; row++)
+            {
+                var entry = new Entry
+                {
+                    Text = "",
+                    VerticalOptions = LayoutOptions.Center,
+                    HorizontalOptions = LayoutOptions.Center
+                };
+                entry.Unfocused += Entry_Unfocused;
+                entry.Focused += Entry_Focused;
+                Grid.SetRow(entry, row);
+                Grid.SetColumn(entry, newColumn);
+                grid.Children.Add(entry);
+            }
+
+            RecalculateAll();
         }
     }
 }
