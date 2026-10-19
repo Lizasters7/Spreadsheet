@@ -4,12 +4,15 @@ using System;
 using System.Collections.Generic;
 using Grid = Microsoft.Maui.Controls.Grid;
 using LabCalculator;
+using CommunityToolkit.Maui.Storage;
+using System.Text;
+using System.Text.Json;
 
 namespace UI
 {
     public partial class MainPage : ContentPage
     {
-        const int CountColumn = 26; 
+        const int CountColumn = 26;
         const int CountRow = 50;
 
         private readonly Dictionary<string, string> cellExpressions = new Dictionary<string, string>();
@@ -31,7 +34,7 @@ namespace UI
         {
             if (!cellExpressions.TryGetValue(cellName, out var expr) || string.IsNullOrWhiteSpace(expr))
             {
-                return 0.0; 
+                return 0.0;
             }
             if (!visiting.Add(cellName))
             {
@@ -200,15 +203,64 @@ namespace UI
             RecalculateAll();
         }
 
-        private void SaveButton_Clicked(object sender, EventArgs e)
+        private async void SaveButton_Clicked(object sender, EventArgs e)
         {
-            // Обробка кнопки "Зберегти"
+            var json = JsonSerializer.Serialize(cellExpressions, new JsonSerializerOptions { WriteIndented = true });
+            using var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
+
+            var result = await FileSaver.Default.SaveAsync("table.json", stream, CancellationToken.None);
+            if (result.IsSuccessful)
+            {
+                await DisplayAlertAsync("Збереження", "Таблицю збережено у файл:\n" + result.FilePath, "OK");
+            }
+            else if (result.Exception != null)
+            {
+                await DisplayAlertAsync("Збереження", "Файл не збережено: " + result.Exception.Message, "OK");
+            }
         }
 
-        private void ReadButton_Clicked(object sender, EventArgs e)
+        private async void ReadButton_Clicked(object sender, EventArgs e)
         {
-            // Обробка кнопки "Прочитати"
+            try
+            {
+                var jsonType = new FilePickerFileType(new Dictionary<DevicePlatform, IEnumerable<string>>
+                {
+                    { DevicePlatform.WinUI, new[] { ".json" } },
+                    { DevicePlatform.Android, new[] { "application/json" } },
+                    { DevicePlatform.iOS, new[] { "public.json" } },
+                    { DevicePlatform.MacCatalyst, new[] { "public.json" } }
+                });
+
+                var file = await FilePicker.Default.PickAsync(new PickOptions
+                {
+                    PickerTitle = "Оберіть файл таблиці",
+                    FileTypes = jsonType
+                });
+
+                if (file != null)
+                {
+                    using var stream = await file.OpenReadAsync();
+                    using var reader = new StreamReader(stream);
+                    var json = await reader.ReadToEndAsync();
+
+                    var data = JsonSerializer.Deserialize<Dictionary<string, string>>(json);
+                    if (data != null)
+                    {
+                        cellExpressions.Clear();
+                        foreach (var pair in data)
+                        {
+                            cellExpressions[pair.Key] = pair.Value;
+                        }
+                        RecalculateAll();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                await DisplayAlertAsync("Помилка", "Не вдалося прочитати файл: " + ex.Message, "OK");
+            }
         }
+
 
         private async void ExitButton_Clicked(object sender, EventArgs e)
         {
