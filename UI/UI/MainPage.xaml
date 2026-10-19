@@ -7,6 +7,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
@@ -26,7 +27,9 @@
 
         <Entry x:Name="textInput" Placeholder="Введіть текст" Grid.Row="1" Grid.ColumnSpan="2" />
 
-        <ScrollView Grid.Row="2" Grid.ColumnSpan="2">
+        <Label x:Name="errorLabel" Grid.Row="2" Grid.ColumnSpan="2" TextColor="Red" />
+
+        <ScrollView Grid.Row="3" Grid.ColumnSpan="2">
             <Grid x:Name="grid">
             </Grid>
         </ScrollView>

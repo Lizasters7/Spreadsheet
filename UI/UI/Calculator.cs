@@ -9,7 +9,7 @@ namespace LabCalculator
 {
     public static class Calculator
     {
-        public static object Evaluate(string expression)
+        public static object Evaluate(string expression, Func<string, object> resolveCell = null)
         {
             if (string.IsNullOrWhiteSpace(expression))
             {

@@ -14,6 +14,8 @@ namespace UI
 
         private readonly Dictionary<string, string> cellExpressions = new Dictionary<string, string>();
 
+        private readonly Dictionary<string, string> cellErrors = new Dictionary<string, string>();
+
         public MainPage()
         {
             InitializeComponent();
@@ -47,6 +49,7 @@ namespace UI
 
         private void RecalculateAll()
         {
+            cellErrors.Clear();
             foreach (var child in grid.Children)
             {
                 if (child is Entry entry && !entry.IsFocused)
@@ -59,9 +62,10 @@ namespace UI
                             var result = EvaluateCell(name, new HashSet<string>());
                             entry.Text = result is bool b ? (b ? "True" : "False") : result.ToString();
                         }
-                        catch (Exception)
+                        catch (Exception ex)
                         {
                             entry.Text = "Error";
+                            cellErrors[name] = ex.Message;
                         }
                     }
                     else
@@ -72,24 +76,34 @@ namespace UI
             }
         }
 
-        private void Entry_Focused(object sender, FocusEventArgs e)
+        private void Entry_Focused(object? sender, FocusEventArgs e)
         {
-            var entry = (Entry)sender;
-            var name = GetCellName(Grid.GetRow(entry) - 1, Grid.GetColumn(entry) - 1);
-            string expr;
-            if (cellExpressions.TryGetValue(name, out expr))
+            if (sender is Entry entry)
             {
-                entry.Text = expr;
-                textInput.Text = expr;
-            }
-            else
-            {
-                entry.Text = "";
-                textInput.Text = "";
+                var name = GetCellName(Grid.GetRow(entry) - 1, Grid.GetColumn(entry) - 1);
+                string? expr;
+                if (cellExpressions.TryGetValue(name, out expr))
+                {
+                    entry.Text = expr;
+                    textInput.Text = expr;
+                }
+                else
+                {
+                    entry.Text = "";
+                    textInput.Text = "";
+                }
+                string? error;
+                if (cellErrors.TryGetValue(name, out error))
+                {
+                    errorLabel.Text = name + ": " + error;
+                }
+                else
+                {
+                    errorLabel.Text = "";
+                }
             }
         }
 
-        //створення таблиці
         private void CreateGrid()
         {
             AddColumnsAndColumnLabels();
@@ -98,7 +112,6 @@ namespace UI
 
         private void AddColumnsAndColumnLabels()
         {
-            // Додати стовпці та підписи для стовпців
             for (int col = 0; col < CountColumn + 1; col++)
             {
                 grid.ColumnDefinitions.Add(new ColumnDefinition());
@@ -120,12 +133,10 @@ namespace UI
 
         private void AddRowsAndCellEntries()
         {
-            // Додати рядки, підписи для рядків та комірки
             for (int row = 0; row < CountRow; row++)
             {
                 grid.RowDefinitions.Add(new RowDefinition());
 
-                // Додати підпис для номера рядка
                 var label = new Label
                 {
                     Text = (row + 1).ToString(),
@@ -135,8 +146,6 @@ namespace UI
                 Grid.SetRow(label, row + 1);
                 Grid.SetColumn(label, 0);
                 grid.Children.Add(label);
-
-                // Додати комірки (Entry) для вмісту
                 for (int col = 0; col < CountColumn; col++)
                 {
                     var entry = new Entry
@@ -169,12 +178,21 @@ namespace UI
             return columnName;
         }
 
-        private void Entry_Unfocused(object sender, FocusEventArgs e)
+        private void Entry_Unfocused(object? sender, FocusEventArgs e)
         {
-            var entry = (Entry)sender;
-            var name = GetCellName(Grid.GetRow(entry) - 1, Grid.GetColumn(entry) - 1);
-            cellExpressions[name] = entry.Text ?? "";
-            RecalculateAll();
+            if (sender is Entry entry)
+            {
+                var name = GetCellName(Grid.GetRow(entry) - 1, Grid.GetColumn(entry) - 1);
+                if (entry.Text != null)
+                {
+                    cellExpressions[name] = entry.Text;
+                }
+                else
+                {
+                    cellExpressions[name] = "";
+                }
+                RecalculateAll();
+            }
         }
 
         private void CalculateButton_Clicked(object sender, EventArgs e)
@@ -194,7 +212,7 @@ namespace UI
 
         private async void ExitButton_Clicked(object sender, EventArgs e)
         {
-            bool answer = await DisplayAlert("Підтвердження", "Ви дійсно хочете вийти?", "Так", "Ні");
+            bool answer = await DisplayAlertAsync("Підтвердження", "Ви дійсно хочете вийти?", "Так", "Ні");
             if (answer)
             {
                 System.Environment.Exit(0);
@@ -203,7 +221,7 @@ namespace UI
 
         private async void HelpButton_Clicked(object sender, EventArgs e)
         {
-            await DisplayAlert("Довідка", "Лабораторна робота 1. Варіант 34", "OK");
+            await DisplayAlertAsync("Довідка", "Лабораторна робота 1. Варіант 34", "OK");
         }
 
         private void DeleteRowButton_Clicked(object sender, EventArgs e)
