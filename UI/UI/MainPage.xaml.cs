@@ -136,9 +136,10 @@ namespace UI
 
         private void AddColumnsAndColumnLabels()
         {
-            grid.ColumnDefinitions.Add(new ColumnDefinition());
+            grid.RowDefinitions.Add(new RowDefinition());
             for (int col = 0; col < CountColumn + 1; col++)
             {
+                grid.ColumnDefinitions.Add(new ColumnDefinition());
                 if (col > 0)
                 {
                     var label = new Label
