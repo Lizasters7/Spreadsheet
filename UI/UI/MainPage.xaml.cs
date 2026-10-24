@@ -436,7 +436,7 @@ namespace UI
 
         private async void HelpButton_Clicked(object sender, EventArgs e)
         {
-            await DisplayAlertAsync("Довідка", "Лабораторна робота 1. Варіант 34", "OK");
+            await DisplayAlertAsync("Довідка", "Лабораторна робота 1. Студентки Ринки Єлизавети", "OK");
         }
 
         private async void DeleteRowButton_Clicked(object sender, EventArgs e)
