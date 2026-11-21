@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -9,14 +10,7 @@ namespace LabCalculator
 {
     class LabCalculatorVisitor : LabCalculatorBaseVisitor<object>
     {
-       Dictionary<string, double> tableIdentifier = new Dictionary<string, double>();
-
-        private readonly Func<string, object> resolveCell;
-
-        public LabCalculatorVisitor(Func<string, object> resolveCell = null)
-        {
-            this.resolveCell = resolveCell;
-        }
+        Dictionary<string, double> tableIdentifier = new Dictionary<string, double>();
 
         public override object VisitCompileUnit(LabCalculatorParser.CompileUnitContext context)
         {
@@ -25,24 +19,23 @@ namespace LabCalculator
 
         public override object VisitNumberExpr(LabCalculatorParser.NumberExprContext context)
         {
-            var result = double.Parse(context.GetText());
+            var result = double.Parse(context.GetText(), CultureInfo.InvariantCulture);
             Debug.WriteLine(result);
             return result;
         }
 
         public override object VisitIdentifierExpr(LabCalculatorParser.IdentifierExprContext context)
         {
-            var name = context.GetText().ToUpper();
-            if (resolveCell != null)
-            {
-                return resolveCell(name);
-            }
+            var result = context.GetText();
             double value;
-            if (tableIdentifier.TryGetValue(name, out value))
+            if (tableIdentifier.TryGetValue(result.ToString(), out value))
             {
                 return value;
             }
-            return 0.0;
+            else
+            {
+                return 0.0;
+            }
         }
 
         public override object VisitParenthesizedExpr(LabCalculatorParser.ParenthesizedExprContext context)
@@ -59,7 +52,7 @@ namespace LabCalculator
                 Debug.WriteLine("{0} + {1}", left, right);
                 return left + right;
             }
-            else 
+            else
             {
                 Debug.WriteLine("{0} - {1}", left, right);
                 return left - right;
@@ -75,7 +68,7 @@ namespace LabCalculator
                 Debug.WriteLine("{0} * {1}", left, right);
                 return left * right;
             }
-            else 
+            else
             {
                 if (context.operatorToken.Type == LabCalculatorLexer.DIVIDE && right == 0)
                 {
@@ -88,13 +81,13 @@ namespace LabCalculator
 
         public override object VisitUnaryExpr(LabCalculatorParser.UnaryExprContext context)
         {
-            var value = (double)Visit(context.expression());
+            var value = ExpectNumber(Visit(context.expression()));
             if (context.operatorToken.Type == LabCalculatorLexer.SUBTRACT)
             {
                 Debug.WriteLine("unary - {0}", value);
                 return -value;
             }
-            else 
+            else
             {
                 return value;
             }
@@ -102,13 +95,13 @@ namespace LabCalculator
 
         public override object VisitIncDecExpr(LabCalculatorParser.IncDecExprContext context)
         {
-            var value = (double)Visit(context.expression());
+            var value = ExpectNumber(Visit(context.expression()));
             if (context.operatorToken.Type == LabCalculatorLexer.INC)
             {
                 Debug.WriteLine("inc({0})", value);
                 return value + 1;
             }
-            else 
+            else
             {
                 Debug.WriteLine("dec({0})", value);
                 return value - 1;
@@ -157,7 +150,7 @@ namespace LabCalculator
                 {
                     result = leftNum <= rightNum;
                 }
-                else 
+                else
                 {
                     result = leftNum >= rightNum;
                 }
@@ -171,14 +164,18 @@ namespace LabCalculator
             return result;
         }
 
-        private double WalkLeft(LabCalculatorParser.ExpressionContext context)
+        private static double ExpectNumber(object value)
         {
-            var value = Visit(context.GetRuleContext<LabCalculatorParser.ExpressionContext>(0));
-            if (!(value is double))
+            if (!(value is double number))
             {
                 throw new ArgumentException("Expected a number, got a boolean value");
             }
-            return (double)Visit(context.GetRuleContext<LabCalculatorParser.ExpressionContext>(0));
+            return number;
+        }
+
+        private double WalkLeft(LabCalculatorParser.ExpressionContext context)
+        {
+            return ExpectNumber(WalkLeftRaw(context));
         }
 
         private object WalkLeftRaw(LabCalculatorParser.ExpressionContext context)
@@ -193,12 +190,7 @@ namespace LabCalculator
 
         private double WalkRight(LabCalculatorParser.ExpressionContext context)
         {
-            var value = Visit(context.GetRuleContext<LabCalculatorParser.ExpressionContext>(1));
-            if (!(value is double))
-            {
-                throw new ArgumentException("Expected a number, got a boolean value");
-            }
-            return (double)Visit(context.GetRuleContext<LabCalculatorParser.ExpressionContext>(1));
+            return ExpectNumber(WalkRightRaw(context));
         }
 
         public override object VisitTrueExpr(LabCalculatorParser.TrueExprContext context)
